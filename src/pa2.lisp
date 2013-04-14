@@ -242,6 +242,15 @@ plist created from create-m-c-plist."
 and cannibals problem. The state is initialized as:
 (:LEFT (:MISSIONAIRES m :CANNIBALS c) :RIGHT (:MISSIONARIES 0 :CANNIBALS 0)
 :CANOE +canoe-left+)."
+;(:LEFT (:MISSIONAIRES m
+;        :CANNIBALS c)
+; :RIGHT (:MISSIONARIES 0
+;         :CANNIBALS 0)
+; :CANOE (:BANK +canoe-left+
+;         :SEAT-1 (:USED nil
+;                  :TYPE nil)
+;         :SEAT-2 (:USED nil
+;                  :TYPE nil)))
   `(append (create-bank-plist +left-bank+ ,m ,c)
            (create-bank-plist +right-bank+ 0 0)
            (list :canoe +canoe-left+)))
@@ -260,11 +269,11 @@ and cannibals problem. The state is initialized as:
   (if (funcall success-form state)
       (return t))
 
-  (let ((next-state state))
-    ;; Canoe left:
-    ;;   Move 2 m left
-    (when (is-canoe-left state)
-      (when (> (get-m state +left-bank+) 0)
+  ;(let ((next-state state))
+;        (current-bank (get-canoe-bank state)))
+    ;(when (is-canoe-left state)
+      ;(do ()
+          ;((> get-m state +left-bank+))
 
   nil)
 
