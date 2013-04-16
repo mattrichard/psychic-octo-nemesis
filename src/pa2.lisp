@@ -1,3 +1,14 @@
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;
+;;;; NOTE:
+;;;;
+;;;; Program does not work. The state generator is not working as planned.
+;;;; The issue seems to be with modifying the state plist directly, rather
+;;;; than creating a new list, which is causing side effects when attempting
+;;;; to copy the list.
+;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 ;;;; Programming Assignment #2: Functional Programming in Lisp
 ;;;;                            Missionaries and Cannibals Puzzle
 ;;;;
@@ -72,15 +83,7 @@
 ;;;;
 ;;;; Usage:
 ;;;; 
-;;;; 1. From a terminal:
-;;;;
-;;;;	$ clisp pa2.lisp M C
-;;;;
-;;;; 2. From a Lisp session:
-;;;;
 ;;;;	(m-c m c)
-;;;;
-;;;; Bugs: None
 
 
 
@@ -103,7 +106,7 @@ unknown."
 ;;; functions/macros following these functions are provided to allow easy
 ;;; modification of the state (data structure).
 ;;;
-;;; For this problem, the state plist is laid-out and initialized as follows:
+;;; For this problem, the state plist is laid out and initialized as follows:
 ;;; 
 ;;;  (:LEFT  (:MISSIONARIES m
 ;;;           :CANNIBALS    c)
@@ -192,7 +195,7 @@ otherwise, returns nil."
 
 (defun is-canoe-right (state)
   "Returns t if the canoe is on the right bank; otherwise, returns nil."
-  (eql (get-canoe-bank state) right-bank+))
+  (eql (get-canoe-bank state) +right-bank+))
 
 
 
@@ -263,60 +266,6 @@ the canoe onto the current bank."
 
 
 
-(defun move-one-m (state)
-  "Moves one missionary from the current bank to the other."
-  (let* ((current-bank (get-canoe-bank state)
-         (other-bank (get-other-bank current-bank))))
-    (when (> (get-m state current-bank) 0)
-      (dec-m state current-bank)
-      (inc-m state other-bank)
-      (move-canoe state))))
-
-(defun move-two-m (state)
-  "Moves two missionaries from the current bank to the other."
-  (let* ((current-bank (get-canoe-bank state)
-         (other-bank (get-other-bank current-bank))))
-    (when (> (get-m state current-bank) 1)
-      (dec-m state current-bank)
-      (dec-m state current-bank)
-      (inc-m state other-bank)
-      (inc-m state other-bank)
-      (move-canoe state))))
-
-(defun move-m-c (state)
-  "Moves one missionary and one cannibal from the current bank to the other."
-  (let* ((current-bank (get-canoe-bank state)
-         (other-bank (get-other-bank current-bank))))
-    (when (and (> (get-c state current-bank) 0)
-               (> (get-m state current-bank) 0))
-      (dec-c state current-bank)
-      (dec-m state current-bank)
-      (inc-c state other-bank)
-      (inc-m state other-bank)
-      (move-canoe state))))
-
-(defun move-one-c (state)
-  "Moves one cannibal from the current bank to the other."
-  (let* ((current-bank (get-canoe-bank state)
-         (other-bank (get-other-bank current-bank))))
-    (when (> (get-c state current-bank) 0)
-      (dec-c state current-bank)
-      (inc-c state other-bank)
-      (move-canoe state))))
-
-(defun move-two-c (state)
-  "Moves two cannibals from the current bank to the other."
-  (let* ((current-bank (get-canoe-bank state)
-         (other-bank (get-other-bank current-bank))))
-    (when (> (get-c state current-bank) 1)
-      (dec-c state current-bank)
-      (dec-c state current-bank)
-      (inc-c state other-bank)
-      (inc-c state other-bank)
-      (move-canoe state))))
-
-
-
 (defun print-header ()
   (format t "left side~15tright side~30tcanoe~40tlast move~%")
   (format t "---------~15t----------~30t-----~40t---------~%"))
@@ -330,8 +279,26 @@ the canoe onto the current bank."
             (get-canoe-bank state)))
 
 
+(defun is-valid-state (state)
+  (format t "Checking if state is valid:~%")
+  (format t "  ~a~%" state)
+  (and (>= (get-m state +left-bank+) 0)
+       (>= (get-c state +left-bank+) 0)
+       (>= (get-m state +right-bank+) 0)
+       (>= (get-c state +right-bank+) 0)
+       (if (> (get-m state +left-bank+) 0)
+         (>= (get-m state +left-bank+) (get-c state +left-bank+))
+         t)
+       (if (> (get-m state +right-bank+) 0)
+         (>= (get-m state +right-bank+) (get-c state +right-bank+))
+         t)
+       (>= (get-canoe-count state) 0)
+       (<= (get-canoe-count state) +max-canoe-count+)))
+
+
 
 (defun success (state)
+  "Success state for the dfs function."
   ;; Success if the canoe, all missionaries, and all cannibals are on the
   ;; right bank (i.e. no missionaries nor cannibals are on the left bank)
   (and (= (get-m state +left-bank+) 0)
@@ -339,15 +306,57 @@ the canoe onto the current bank."
        (is-canoe-right state)))
 
 (defun generate-next-states (state)
-  ;TODO: write this
-  )
+  (format t "Generating next states~%")
+  (let ((next-states ())
+        (current-bank (get-canoe-bank state))
+        (temp-state (copy-list state)))
+    (cond
+      ((is-canoe-left state)
+       (format t "Canoe is left~%")
+       (cond
+         ((is-canoe-full state)
+          (format t "Canoe is full~%")
+          (move-canoe temp-state)
+          (setf next-states (cons temp-state next-states)))
+         ((is-canoe-empty state)
+          (format t "Canoe is empty~%")
+
+          (load-canoe temp-state ':missionaries 2)
+          (if (is-valid-state temp-state)
+            (setf next-states (cons temp-state next-states)))
+
+          (setf temp-state state)
+          (load-canoe temp-state ':cannibals 2)
+          (if (is-valid-state temp-state)
+            (setf next-states (cons temp-state next-states)))
+
+          (setf temp-state state)
+          (load-canoe temp-state ':missionaries)
+          (load-canoe temp-state ':cannibals)
+          (if (is-valid-state temp-state)
+            (setf next-states (cons temp-state next-states)))
+
+          (setf temp-state state)
+          (load-canoe temp-state ':missionaries)
+          (if (is-valid-state temp-state)
+            (setf next-states (cons temp-state next-states)))
+
+          (setf temp-state state)
+          (load-canoe temp-state ':cannibals)
+          (if (is-valid-state temp-state)
+            (setf next-states (cons temp-state next-states))))))
+      ((is-canoe-right state)
+       (format t "Canoe is right~%")))
+    next-states))
 
 (defun dfs (state success-form generator-form)
   ;; Check for success
   (if (funcall success-form state)
       (return t))
+  ;; Recursive call for all valid next states
   (dolist (next-state (funcall generator-form state))
-    (if (dfs next-state #'success-form #'generator-form)
+    (format t "~a~%" next-state)
+    (if (dfs next-state success-form generator-form)
         (return t)))
   nil)
 
@@ -355,28 +364,29 @@ the canoe onto the current bank."
 
 (defun m-c (m c)
   (let ((state (create-state-plist m c)))
+     (format t "Initial state: ~a~%" state)
+;    (print-header)
+;    (print-state state)
 
-    (print-header)
-    (print-state state)
+;    (inc-m state +left-bank+)
+;    (print-state state)
+;    (inc-c state +left-bank+)
+;    (print-state state)
+;    (inc-m state +right-bank+)
+;    (print-state state)
+;    (inc-c state +right-bank+)
+;    (print-state state)
 
-    (inc-m state +left-bank+)
-    (print-state state)
-    (inc-c state +left-bank+)
-    (print-state state)
-    (inc-m state +right-bank+)
-    (print-state state)
-    (inc-c state +right-bank+)
-    (print-state state)
+;    (load-canoe state ':missionaries 2)
+;    (print-state state)
 
-    (load-canoe state ':missionaries 2)
-    (print-state state)
+;    (move-canoe state)
+;    (print-state state)
 
-    (move-canoe state)
-    (print-state state)
+;    (unload-canoe state ':missionaries 1)
+;    (print-state state)
+;    (print state)))
+    (if (dfs state #'success #'generate-next-states)
+      (format t "Success"))))
 
-    (unload-canoe state ':missionaries 1)
-    (print-state state)
-    (print state)))
-    ;(dfs state #'success #'generate-next-states)))
-
-(m-c -1 -1)
+;(m-c 1 1)
