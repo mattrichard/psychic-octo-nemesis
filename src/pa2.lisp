@@ -83,21 +83,65 @@
 ;;;; Bugs: None
 
 
-;;; Constants used to indicate which side of the river the canoe is on
+
 (defconstant +left-bank+ :left)
 (defconstant +right-bank+ :right)
 (defconstant +max-canoe-count+ 2 "Maximum number of missionaries or cannibals
 that the canoe can hold.")
-
 
 (defun get-other-bank (bank)
   "Returns the bank opposite to the given bank, or nil if the given bank is 
 unknown."
   (cond
     ((eql bank +left-bank+) +right-bank+)
-    ((eql bank +right-bank+) +left-bank+)
-    (t nil)))
+    ((eql bank +right-bank+) +left-bank+)))
 
+
+
+;;; Below, are functions used for creating and initializing the data structure
+;;; used in solving the missionaries and cannibals problem. Most of the
+;;; functions/macros following these functions are provided to allow easy
+;;; modification of the state (data structure).
+;;;
+;;; For this problem, the state plist is laid-out and initialized as follows:
+;;; 
+;;;  (:LEFT  (:MISSIONARIES m
+;;;           :CANNIBALS    c)
+;;;   :RIGHT (:MISSIONARIES 0
+;;;           :CANNIBALS    0)
+;;;   :CANOE (:BANK         +left-bank+
+;;;           :SEATS        ())
+;;;
+;;; where m and c are the given number of missionaries and cannibals to solve
+;;; the problem for.
+
+(defun create-m-c-plist (&key (m 0) (c 0))
+  "Returns a plist containing the keys MISSIONARIES and CANNIBALS and values 
+:m and :c, respectively."
+  (list :missionaries m :cannibals c))
+
+(defun create-bank-plist (bank-key &key (m 0) (c 0))
+  "Returns a plist with the key as bank-key and the value a plist created from 
+create-m-c-plist."
+  (list bank-key (create-m-c-plist :m m :c c)))
+
+(defun create-canoe-plist (&optional (canoe-bank +left-bank+))
+  "Returns a plist for use in initializing the canoe for the state."
+  (list :canoe (list :bank canoe-bank :seats ())))
+
+(defun create-state-plist (m c)
+  "Returns a plist that is used as the data structure for solving the 
+missionaries and cannibals problem."
+  (append (create-bank-plist +left-bank+ :m m :c c)
+          (create-bank-plist +right-bank+)
+          (create-canoe-plist)))
+
+
+
+;;; The following macros are provided to allow easy modification of the state
+;;; plist. If it weren't for these macros, various functions (e.g. the functions
+;;; inc-m, inc-c, dec-m, dec-c defined below) would not modify the plist but
+;;; instead create a new plist, which was undesireable.
 
 (defmacro get-bank (state bank)
   "Macro for getting the given bank from the state plist."
@@ -124,6 +168,10 @@ unknown."
    `(getf (get-canoe ,state) :seats))
 
 
+
+;;; The functions defined below extrapolate the canoe's properties in
+;;; relation to the given state.
+
 (defun get-canoe-count (state)
   "Returns the number of missionaries and cannibals currently in the canoe."
   (length (get-canoe-seats state)))
@@ -144,20 +192,30 @@ otherwise, returns nil."
 
 (defun is-canoe-right (state)
   "Returns t if the canoe is on the right bank; otherwise, returns nil."
-  (eql (get-canoe-bank state) +right-bank+))
+  (eql (get-canoe-bank state) right-bank+))
 
-;(defun canoe-state-to-string (state)
-;  (cond
-;    ((is-canoe-left state) "left")
-;    ((is-canoe-right state) "right")
-;    (t "unknown")))
 
-;;(defmacro push-to-end (item place)
-;;  `(setf ,place (nconc ,place (list ,item))))
-;;
-;;(defun append-nested-plist (plist key sub-plist)
-;;  (push-to-end sub-plist (getf plist key))
-;;  plist)
+
+;;; Functions provided for easily incrementing or decrementing the number
+;;; of missionaries or cannibals on the current or given bank by one.
+
+(defun dec-m (state &optional (bank (get-canoe-bank state)))
+  "Decrements the number of missionaries on the given bank by 1."
+  (decf (get-m state bank)))
+
+(defun dec-c (state &optional (bank (get-canoe-bank state)))
+  "Decrements the number of cannibals on the given bank by 1."
+  (decf (get-c state bank)))
+
+(defun inc-m (state &optional (bank (get-canoe-bank state)))
+  "Increments the number of missionaries on the given bank by 1."
+  (incf (get-m state bank)))
+
+(defun inc-c (state &optional (bank (get-canoe-bank state)))
+  "Increments the number of cannibals on the given bank by 1."
+  (incf (get-c state bank)))
+
+
 
 (defun load-canoe (state m-or-c &optional (num 1))
   "Loads num number of missionaries or cannibals (specified by m-or-c) from
@@ -165,34 +223,45 @@ the current bank onto the canoe."
   ;; Only load the canoe if num is positive and adding num missionaries or
   ;; cannibals won't overflow the canoe
   (when (and (plusp num)
-             (<= (+ num (get-canoe-count state)) +max-canoe-count+))))
-    
+             (<= (+ num (get-canoe-count state)) +max-canoe-count+))
+    (let ((dec-func))
+      (cond
+        ((eql m-or-c :missionaries) (setf dec-func #'dec-m))
+        ((eql m-or-c :cannibals) (setf dec-func #'dec-c)))
+      (unless (not dec-func)
+        ;; Remove num missionaries and cannibals from the current bank and
+        ;; put them on the canoe
+        (dotimes (i num)
+          (funcall dec-func state (get-canoe-bank state))
+          (setf (get-canoe-seats state)
+                (append (get-canoe-seats state) (list m-or-c))))))))
 
-(defun unload-canoe (m-or-c &optional (num 1)))
+(defun unload-canoe (state m-or-c &optional (num 1))
+  "Unloads num number of missionaries or cannibals (specified by m-or-c) from
+the canoe onto the current bank."
+  ;; Only load the canoe if num is positive and adding num missionaries or
+  ;; cannibals won't overflow the canoe
+  (when (and (plusp num)
+             (> (- (get-canoe-count state) num) 0))
+    (let ((inc-func))
+      (cond
+        ((eql m-or-c :missionaries) (setf inc-func #'dec-m))
+        ((eql m-or-c :cannibals) (setf inc-func #'dec-c)))
+      (unless (not inc-func)
+        ;; Remove num missionaries or cannibals from the canoe
+        (setf (get-canoe-seats state)
+              (remove m-or-c (get-canoe-seats state) :count num))
+        ;; Put num missionaries or cannibals on the current bank
+        (dotimes (i num)
+          (funcall inc-func state (get-canoe-bank state)))))))
 
-
-(defun dec-m (state bank)
-  "Decrements the number of missionaries on the given bank by 1."
-  (decf (get-m state bank)))
-
-(defun dec-c (state bank)
-  "Decrements the number of cannibals on the given bank by 1."
-  (decf (get-c state bank)))
-
-(defun inc-m (state bank)
-  "Increments the number of missionaries on the given bank by 1."
-  (incf (get-m state bank)))
-
-(defun inc-c (state bank)
-  "Increments the number of cannibals on the given bank by 1."
-  (incf (get-c state bank)))
 
 
 (defun move-canoe (state)
   "Moves the canoe from the current bank to the other."
   (setf (get-canoe-bank state) (get-other-bank (get-canoe-bank state))))
-;  "Moves the canoe from the current bank to the other"
-;  (setf (get-canoe state) (- (get-canoe state))))
+
+
 
 (defun move-one-m (state)
   "Moves one missionary from the current bank to the other."
@@ -247,6 +316,7 @@ the current bank onto the canoe."
       (move-canoe state))))
 
 
+
 (defun print-header ()
   (format t "left side~15tright side~30tcanoe~40tlast move~%")
   (format t "---------~15t----------~30t-----~40t---------~%"))
@@ -259,28 +329,6 @@ the current bank onto the canoe."
             (get-c state +right-bank+)
             (get-canoe-bank state)))
 
-
-(defun create-m-c-plist (&key (m 0) (c 0))
-  "Returns a plist containing the keys MISSIONARIES and CANNIBALS and values 
-:m and :c, respectively."
-  (list :missionaries m :cannibals c))
-
-(defun create-bank-plist (bank-key &key (m 0) (c 0))
-  "Returns a plist with the key as bank-key and the value a plist created from 
-create-m-c-plist."
-  (list bank-key (create-m-c-plist :m m :c c)))
-
-(defun create-canoe-plist (&optional (canoe-bank +left-bank+))
-  (list :canoe (list :bank canoe-bank :seats ())))
-
-(defun create-state-plist (m c)
-  "Generates a plist used as the data structure for solving the missionaries 
-and cannibals problem. The state is initialized as:
-(:LEFT (:MISSIONAIRES m :CANNIBALS c) :RIGHT (:MISSIONARIES 0 :CANNIBALS 0)
-:CANOE (:BANK +left-bank+ :SEATS ())."
-  (append (create-bank-plist +left-bank+ :m m :c c)
-          (create-bank-plist +right-bank+)
-          (create-canoe-plist)))
 
 
 (defun success (state)
@@ -304,6 +352,7 @@ and cannibals problem. The state is initialized as:
   nil)
 
 
+
 (defun m-c (m c)
   (let ((state (create-state-plist m c)))
 
@@ -319,12 +368,15 @@ and cannibals problem. The state is initialized as:
     (inc-c state +right-bank+)
     (print-state state)
 
-    (move-canoe state)
+    (load-canoe state ':missionaries 2)
     (print-state state)
 
     (move-canoe state)
-    (print-state state)))
-    ;(dfs state #'success #'generate-next-states)))
+    (print-state state)
 
+    (unload-canoe state ':missionaries 1)
+    (print-state state)
+    (print state)))
+    ;(dfs state #'success #'generate-next-states)))
 
 (m-c -1 -1)
