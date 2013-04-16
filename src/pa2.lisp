@@ -152,9 +152,23 @@ otherwise, returns nil."
 ;    ((is-canoe-right state) "right")
 ;    (t "unknown")))
 
-(defun load-canoe (person &optional (num 1)))
+;;(defmacro push-to-end (item place)
+;;  `(setf ,place (nconc ,place (list ,item))))
+;;
+;;(defun append-nested-plist (plist key sub-plist)
+;;  (push-to-end sub-plist (getf plist key))
+;;  plist)
 
-(defun unload-canoe (person &optional (num 1)))
+(defun load-canoe (state m-or-c &optional (num 1))
+  "Loads num number of missionaries or cannibals (specified by m-or-c) from
+the current bank onto the canoe."
+  ;; Only load the canoe if num is positive and adding num missionaries or
+  ;; cannibals won't overflow the canoe
+  (when (and (plusp num)
+             (<= (+ num (get-canoe-count state)) +max-canoe-count+))))
+    
+
+(defun unload-canoe (m-or-c &optional (num 1)))
 
 
 (defun dec-m (state bank)
@@ -292,17 +306,24 @@ and cannibals problem. The state is initialized as:
 
 (defun m-c (m c)
   (let ((state (create-state-plist m c)))
+
     (print-header)
-    ;(print state)))
+    (print-state state)
+
+    (inc-m state +left-bank+)
+    (print-state state)
+    (inc-c state +left-bank+)
+    (print-state state)
+    (inc-m state +right-bank+)
+    (print-state state)
+    (inc-c state +right-bank+)
+    (print-state state)
+
+    (move-canoe state)
+    (print-state state)
+
+    (move-canoe state)
     (print-state state)))
-    ;(inc-m state +left-bank+)
-    ;(print-state state)))
-    ;(inc-c state +left-bank+)
-    ;(print-state state)
-    ;(inc-m state +right-bank+)
-    ;(print-state state)
-    ;(inc-c state +right-bank+)
-    ;(print-state state)))
     ;(dfs state #'success #'generate-next-states)))
 
 
